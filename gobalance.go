@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"sync"
 )
 
@@ -32,6 +33,25 @@ func CreateGoBalancer() *goBalancerInstance {
 	}
 }
 
+func (g *goBalancerInstance) AddServer(addr string) {
+	url, err := url.Parse(addr)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	g.Pool.servers = append(g.Pool.servers, &server{
+		URL:   addr,
+		Up:    true,
+		Proxy: httputil.NewSingleHostReverseProxy(url),
+	})
+}
+
+func (g *goBalancerInstance) Start(addr string) {
+	http.HandleFunc("/", g.balanceRequest)
+	log.Fatal(http.ListenAndServe(addr, nil))
+}
+
 func (g *goBalancerInstance) getCurrentProxy() *httputil.ReverseProxy {
 	g.Pool.mu.Lock()
 	defer g.Pool.mu.Unlock()
@@ -44,9 +64,4 @@ func (g *goBalancerInstance) getCurrentProxy() *httputil.ReverseProxy {
 func (g *goBalancerInstance) balanceRequest(w http.ResponseWriter, r *http.Request) {
 	proxy := g.getCurrentProxy()
 	proxy.ServeHTTP(w, r)
-}
-
-func (g *goBalancerInstance) Start(addr string) {
-	http.HandleFunc("/", g.balanceRequest)
-	log.Fatal(http.ListenAndServe(addr, nil))
 }
